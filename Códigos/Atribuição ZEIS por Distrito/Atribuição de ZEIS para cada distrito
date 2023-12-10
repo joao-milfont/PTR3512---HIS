@@ -1,0 +1,41 @@
+import geopandas as gpd
+import os
+
+# pasta onde estão os arquivos do CEM do determinado ano
+pasta_origem = r'C:\AAATino\Estudos RE\CEM\Infos Lotes 2014'
+
+#pasta onde vai ficar os arquivos do CEM de determinado ano com a atribuição de ZEIS 
+pasta_destino = r'C:\AAATino\Estudos RE\CEM\Infos_de_ZEIS_cada_lote_2014'
+
+# lista com todos arquivos base do CEM
+arquivos_gpkg = [f for f in os.listdir(pasta_origem) if f.endswith('.gpkg')]
+
+# Arquivo mãe de ZEIS
+areas_ZEIS = gpd.read_file('C:\AAATino\Poli\decimo Semestre\GeoPro\Layers Criados\ZEIS_dissolvidos\zeis_dissolvidos.shp')
+
+# iteração de cada layer base de distrito com o arquivo de ZEIS dissolvidos para atribuir aos lotes que são ZEIS, 
+# a sua ZEIS
+a = 0
+for arquivo in arquivos_gpkg:
+    caminho_origem = os.path.join(pasta_origem, arquivo)
+    lotes_distrito = gpd.read_file(caminho_origem)
+    #novo CRS
+    novo_crs = 'EPSG:31983'
+    lotes_distrito = lotes_distrito.to_crs(novo_crs)
+
+    #join espacial
+    info_lotes_joined = gpd.sjoin(lotes_distrito, areas_ZEIS, how='left', op='intersects')
+
+    # Mapeia os valores para a nova coluna com base na ZEIS
+    info_lotes_joined['nova_coluna'] = '0'
+    info_lotes_joined.loc[info_lotes_joined['cd_zoneame'] == 'ZEIS-2', 'nova_coluna'] = 'ZEIS 2'
+    info_lotes_joined.loc[info_lotes_joined['cd_zoneame'] == 'ZEIS-3', 'nova_coluna'] = 'ZEIS 3'
+    info_lotes_joined.loc[info_lotes_joined['cd_zoneame'] == 'ZEIS-4', 'nova_coluna'] = 'ZEIS 4'
+    info_lotes_joined.loc[info_lotes_joined['cd_zoneame'] == 'ZEIS-5', 'nova_coluna'] = 'ZEIS 5'
+
+    nome_arquivo_destino = f"ZEIS_2014_{arquivo.split('lotes')[1].strip()}"
+
+    #salvar na pasta nova
+    caminho_destino = os.path.join(pasta_destino,nome_arquivo_destino)
+    info_lotes_joined.to_file(caminho_destino, driver='GPKG')
+    print("operação feita para",arquivo)

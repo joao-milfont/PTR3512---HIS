@@ -1,0 +1,182 @@
+import geopandas as gpd
+import pandas as pd
+import os
+
+#arquivos com atribuição de ZEIS 
+pasta_base_2014 = r'C:\AAATino\Estudos RE\CEM\Infos_de_ZEIS_cada_lote'
+arquivos_gpkg = [f for f in os.listdir(pasta_base_2014) if f.endswith('.gpkg')]
+
+#estrutura da tabela consolidada
+df_consolidado = pd.DataFrame(columns=['Distrito', 'Número de lotes', 'Área total lotes', 'Área total construída', 'Número lotes ZEIS 3', 'Área lotes ZEIS 3', 'Número Lotes Residencial Vertical ZEIS 3', 'Área lotes Residencial Vertical ZEIS 3', 'Número Lotes Residencial Horizontal ZEIS 3', 'Área lotes Residencial Horizontal ZEIS 3', 'Número Lotes Comercial Vertical ZEIS 3', 'Área lotes Comercial Vertical ZEIS 3', 'Número Lotes Comercial Horizontal ZEIS 3', 'Área lotes Comercial Horizontal ZEIS 3', 'Número Lotes Terreno ZEIS 3', 'Área lotes Terreno ZEIS 3', 'Número Lotes Outros usos ZEIS 3', 'Área lotes Outros usos ZEIS 3','Número lotes ZEIS 5', 'Área lotes ZEIS 5', 'Número Lotes Residencial Vertical ZEIS 5', 'Área lotes Residencial Vertical ZEIS 5', 'Número Lotes Residencial Horizontal ZEIS 5', 'Área lotes Residencial Horizontal ZEIS 5', 'Número Lotes Comercial Vertical ZEIS 5', 'Área lotes Comercial Vertical ZEIS 5', 'Número Lotes Comercial Horizontal ZEIS 5', 'Área lotes Comercial Horizontal ZEIS 5', 'Número Lotes Terreno ZEIS 5', 'Área lotes Terreno ZEIS 5', 'Número Lotes Outros usos ZEIS 5', 'Área lotes Outros usos ZEIS 5' ])
+
+
+#iteração em cada arquivo do Dashboard do IPTU com as informações de ZEIS em cada, para
+# adicionar as colunas auxiliares necessárias para a consolidação dos resultados do ano, por distrito
+a = 0
+for arquivo in arquivos_gpkg:
+    gdf = gpd.read_file(pasta_base_2014+"\\"+arquivo)
+
+    #colunas pra somar e verificar se não há atribuição de classificação no dashboard do IPTU. 
+    # se o CA de cada uma dessas linhas for maior que um, atribuo como comercial vertical. Se for
+    # menor que um, atribuo como comercial horizontal
+    colunas_a_somar = ['Residencial vertical Baixo (m2)','Residencial vertical Médio (m2)','Residencial vertical Alto (m2)','Residencial horizontal Baixo (m2)','Residencial horizontal Médio (m2)','Residencial horizontal Alto (m2)','Comercial vertical Baixo (m2)','Comercial vertical Médio (m2)','Comercial vertical Alto (m2)','Comercial horizontal Baixo (m2)','Comercial horizontal Alto (m2)','Comercial horizontal Médio (m2)','Terreno (m2)','Outros Usos (m2)']
+    gdf['Tudo zero?'] = 0
+    gdf.loc[gdf[colunas_a_somar].sum(axis=1) == 0, 'Tudo zero?'] = 1
+
+    # aux CA's
+    gdf["Aux CA > 1"] = 0
+    condicao =(gdf["Tudo zero?"] == 1) & (gdf['CA médio'] > 1)
+    gdf.loc[condicao, 'Aux CA > 1'] = gdf['Área Total Construída']
+
+    gdf["Aux CA <= 1"] = 0
+    condicao =(gdf["Tudo zero?"] == 1) & (gdf['CA médio'] <= 1)
+    gdf.loc[condicao, 'Aux CA <= 1'] = gdf['Área Total Construída']
+
+    #somatórias áreas, para classificar cada linha como sendo ou resi vertical, horizontal, comercial vertical,
+    # horizontal... etc
+    colunas_resi_vertical =['Residencial vertical Baixo (m2)','Residencial vertical Médio (m2)','Residencial vertical Alto (m2)']
+    gdf['Área Resi Vertical'] = 0
+    gdf['Área Resi Vertical'] = gdf[colunas_resi_vertical].sum(axis=1)
+
+    colunas_resi_horizontal =['Residencial horizontal Baixo (m2)','Residencial horizontal Médio (m2)','Residencial horizontal Alto (m2)']
+    gdf['Área Resi Horizontal'] = 0
+    gdf['Área Resi Horizontal'] = gdf[colunas_resi_horizontal].sum(axis=1)
+
+    colunas_comerc_vertical =['Comercial vertical Baixo (m2)','Comercial vertical Médio (m2)','Comercial vertical Alto (m2)']
+    gdf['Área Comercial Vertical'] = 0
+    #tomei como premissa que, se nao ta classificado, e tem CA maior que 1, [é comercial vertical]
+    gdf['Área Comercial Vertical'] = gdf[colunas_comerc_vertical].sum(axis=1) + gdf['Aux CA > 1']
+
+    colunas_comerc_horizontal =['Comercial horizontal Baixo (m2)','Comercial horizontal Alto (m2)','Comercial horizontal Médio (m2)']
+    gdf['Área Comercial Horizontal'] = 0
+    gdf['Área Comercial Horizontal'] = gdf[colunas_comerc_horizontal].sum(axis=1) + gdf['Aux CA <= 1']
+
+    colunas_terreno =['Terreno (m2)']
+    gdf['Área terreno'] = 0
+    gdf['Área terreno'] = gdf[colunas_terreno].sum(axis=1)
+
+    colunas_outros_usos =['Outros Usos (m2)']
+    gdf['Outros usos'] = 0
+    gdf['Outros usos'] = gdf[colunas_outros_usos].sum(axis=1)
+
+    #colunas auxiliares para contagem de lotes de cada classificação
+    colunas_areas = ['Área Resi Vertical','Área Resi Horizontal','Área Comercial Vertical','Área Comercial Horizontal','Área terreno','Outros usos']
+
+    gdf['Aux Resi Vertical'] = 0
+    gdf.loc[gdf['Área Resi Vertical'] == gdf[colunas_areas].max(axis=1), 'Aux Resi Vertical'] = 1
+
+    gdf['Aux Resi Horizontal'] = 0
+    gdf.loc[gdf['Área Resi Horizontal'] == gdf[colunas_areas].max(axis=1), 'Aux Resi Horizontal'] = 1
+
+    gdf['Aux Comercial Vertical'] = 0
+    gdf.loc[gdf['Área Comercial Vertical'] == gdf[colunas_areas].max(axis=1), 'Aux Comercial Vertical'] = 1
+
+    gdf['Aux Comercial Horizontal'] = 0
+    gdf.loc[gdf['Área Comercial Horizontal'] == gdf[colunas_areas].max(axis=1), 'Aux Comercial Horizontal'] = 1
+
+    gdf['Aux Terreno'] = 0
+    gdf.loc[gdf['Área terreno'] == gdf[colunas_areas].max(axis=1), 'Aux Terreno'] = 1
+
+    gdf['Aux Outros Usos'] = 0
+    gdf.loc[gdf['Outros usos'] == gdf[colunas_areas].max(axis=1), 'Aux Outros Usos'] = 1
+
+    #df consolidado
+
+    #cálculos para cada planilha - Geral. Realiza as contagens para cada arquivo dentro desse loop e coloa
+    # na planilha consolidada por lotes
+    numero_lotes = gdf['Área Total dos lotes'].count() - 1
+    area_total_lotes = gdf['Área Total dos lotes'].sum()
+    area_total_construida = gdf['Área Total Construída'].sum()
+
+    #ZEIS 3
+    numero_lotes_zeis3 = (gdf['nova_coluna'] == 'ZEIS 3').sum()
+    area_total_lotes_zeis3 = gdf.loc[gdf['nova_coluna'] == 'ZEIS 3', 'Área Total dos lotes'].sum()
+
+    numero_lotes_resi_vertical_zeis3 = ((gdf['nova_coluna'] == 'ZEIS 3') & (gdf['Aux Resi Vertical'] == 1)).sum()
+    area_total_resi_verti_zeis3 = gdf.loc[((gdf['nova_coluna'] == 'ZEIS 3') & (gdf['Aux Resi Vertical'] == 1)), 'Área Total dos lotes'].sum()
+
+    numero_lotes_resi_horizontal_zeis3 = ((gdf['nova_coluna'] == 'ZEIS 3') & (gdf['Aux Resi Horizontal'] == 1)).sum()
+    area_total_resi_horizontal_zeis3 = gdf.loc[((gdf['nova_coluna'] == 'ZEIS 3') & (gdf['Aux Resi Horizontal'] == 1)), 'Área Total dos lotes'].sum()
+
+    numero_lotes_comercial_vertical_zeis3 = ((gdf['nova_coluna'] == 'ZEIS 3') & (gdf['Aux Comercial Vertical'] == 1)).sum()
+    area_total_comercial_vertical_zeis3 = gdf.loc[((gdf['nova_coluna'] == 'ZEIS 3') & (gdf['Aux Comercial Vertical'] == 1)), 'Área Total dos lotes'].sum()
+
+    numero_lotes_comercial_horizontal_zeis3 = ((gdf['nova_coluna'] == 'ZEIS 3') & (gdf['Aux Comercial Horizontal'] == 1)).sum()
+    area_total_comercial_horizontal_zeis3 = gdf.loc[((gdf['nova_coluna'] == 'ZEIS 3') & (gdf['Aux Comercial Horizontal'] == 1)), 'Área Total dos lotes'].sum()
+
+    numero_lotes_terreno_zeis3 = ((gdf['nova_coluna'] == 'ZEIS 3') & (gdf['Aux Terreno'] == 1)).sum()
+    area_total_terreno_zeis3 = gdf.loc[((gdf['nova_coluna'] == 'ZEIS 3') & (gdf['Aux Terreno'] == 1)), 'Área Total dos lotes'].sum()
+
+    numero_lotes_outros_usos_zeis3 = ((gdf['nova_coluna'] == 'ZEIS 3') & (gdf['Aux Outros Usos'] == 1)).sum()
+    area_total_outros_usos_zeis3 = gdf.loc[((gdf['nova_coluna'] == 'ZEIS 3') & (gdf['Aux Outros Usos'] == 1)), 'Área Total dos lotes'].sum()
+
+    #ZEIS 5
+    numero_lotes_zeis5 = (gdf['nova_coluna'] == 'ZEIS 5').sum()
+    area_total_lotes_zeis5 = gdf.loc[gdf['nova_coluna'] == 'ZEIS 5', 'Área Total dos lotes'].sum()
+
+    numero_lotes_resi_vertical_zeis5 = ((gdf['nova_coluna'] == 'ZEIS 5') & (gdf['Aux Resi Vertical'] == 1)).sum()
+    area_total_resi_verti_zeis5 = gdf.loc[((gdf['nova_coluna'] == 'ZEIS 5') & (gdf['Aux Resi Vertical'] == 1)), 'Área Total dos lotes'].sum()
+
+    numero_lotes_resi_horizontal_zeis5 = ((gdf['nova_coluna'] == 'ZEIS 5') & (gdf['Aux Resi Horizontal'] == 1)).sum()
+    area_total_resi_horizontal_zeis5 = gdf.loc[((gdf['nova_coluna'] == 'ZEIS 5') & (gdf['Aux Resi Horizontal'] == 1)), 'Área Total dos lotes'].sum()
+
+    numero_lotes_comercial_vertical_zeis5 = ((gdf['nova_coluna'] == 'ZEIS 5') & (gdf['Aux Comercial Vertical'] == 1)).sum()
+    area_total_comercial_vertical_zeis5 = gdf.loc[((gdf['nova_coluna'] == 'ZEIS 5') & (gdf['Aux Comercial Vertical'] == 1)), 'Área Total dos lotes'].sum()
+
+    numero_lotes_comercial_horizontal_zeis5 = ((gdf['nova_coluna'] == 'ZEIS 5') & (gdf['Aux Comercial Horizontal'] == 1)).sum()
+    area_total_comercial_horizontal_zeis5 = gdf.loc[((gdf['nova_coluna'] == 'ZEIS 5') & (gdf['Aux Comercial Horizontal'] == 1)), 'Área Total dos lotes'].sum()
+
+    numero_lotes_terreno_zeis5 = ((gdf['nova_coluna'] == 'ZEIS 5') & (gdf['Aux Terreno'] == 1)).sum()
+    area_total_terreno_zeis5 = gdf.loc[((gdf['nova_coluna'] == 'ZEIS 5') & (gdf['Aux Terreno'] == 1)), 'Área Total dos lotes'].sum()
+
+    numero_lotes_outros_usos_zeis5 = ((gdf['nova_coluna'] == 'ZEIS 5') & (gdf['Aux Outros Usos'] == 1)).sum()
+    area_total_outros_usos_zeis5 = gdf.loc[((gdf['nova_coluna'] == 'ZEIS 5') & (gdf['Aux Outros Usos'] == 1)), 'Área Total dos lotes'].sum()
+
+    #atribuição a nova linha no df_consolidado
+    aux_nome = arquivo[8:]
+    print(aux_nome)
+    df_consolidado.at[a, 'Distrito'] = aux_nome
+    #geral
+    df_consolidado.at[a, 'Número de lotes'] = numero_lotes
+    df_consolidado.at[a, 'Área total lotes'] = area_total_lotes
+    df_consolidado.at[a, 'Área total construída'] = area_total_construida
+
+    #ZEIS 3
+    df_consolidado.at[a, 'Número lotes ZEIS 3'] = numero_lotes_zeis3
+    df_consolidado.at[a, 'Área lotes ZEIS 3'] = area_total_lotes_zeis3
+    df_consolidado.at[a, 'Número Lotes Residencial Vertical ZEIS 3'] = numero_lotes_resi_vertical_zeis3
+    df_consolidado.at[a, 'Área lotes Residencial Vertical ZEIS 3'] = area_total_resi_verti_zeis3
+    df_consolidado.at[a, 'Número Lotes Residencial Horizontal ZEIS 3'] = numero_lotes_resi_horizontal_zeis3
+    df_consolidado.at[a, 'Área lotes Residencial Horizontal ZEIS 3'] = area_total_resi_horizontal_zeis3
+    df_consolidado.at[a, 'Número Lotes Comercial Vertical ZEIS 3'] = numero_lotes_comercial_vertical_zeis3
+    df_consolidado.at[a, 'Área lotes Comercial Vertical ZEIS 3'] = area_total_comercial_vertical_zeis3
+    df_consolidado.at[a, 'Número Lotes Comercial Horizontal ZEIS 3'] = numero_lotes_comercial_horizontal_zeis3
+    df_consolidado.at[a, 'Área lotes Comercial Horizontal ZEIS 3'] = area_total_comercial_horizontal_zeis3
+    df_consolidado.at[a, 'Número Lotes Terreno ZEIS 3'] = numero_lotes_terreno_zeis3
+    df_consolidado.at[a, 'Área lotes Terreno ZEIS 3'] = area_total_terreno_zeis3
+    df_consolidado.at[a, 'Número Lotes Outros usos ZEIS 3'] = numero_lotes_outros_usos_zeis3
+    df_consolidado.at[a, 'Área lotes Outros usos ZEIS 3'] = area_total_outros_usos_zeis3
+
+    #ZEIS 5
+    df_consolidado.at[a, 'Número lotes ZEIS 5'] = numero_lotes_zeis5
+    df_consolidado.at[a, 'Área lotes ZEIS 5'] = area_total_lotes_zeis5
+    df_consolidado.at[a, 'Número Lotes Residencial Vertical ZEIS 5'] = numero_lotes_resi_vertical_zeis5
+    df_consolidado.at[a, 'Área lotes Residencial Vertical ZEIS 5'] = area_total_resi_verti_zeis5
+    df_consolidado.at[a, 'Número Lotes Residencial Horizontal ZEIS 5'] = numero_lotes_resi_horizontal_zeis5
+    df_consolidado.at[a, 'Área lotes Residencial Horizontal ZEIS 5'] = area_total_resi_horizontal_zeis5
+    df_consolidado.at[a, 'Número Lotes Comercial Vertical ZEIS 5'] = numero_lotes_comercial_vertical_zeis5
+    df_consolidado.at[a, 'Área lotes Comercial Vertical ZEIS 5'] = area_total_comercial_vertical_zeis5
+    df_consolidado.at[a, 'Número Lotes Comercial Horizontal ZEIS 5'] = numero_lotes_comercial_horizontal_zeis5
+    df_consolidado.at[a, 'Área lotes Comercial Horizontal ZEIS 5'] = area_total_comercial_horizontal_zeis5
+    df_consolidado.at[a, 'Número Lotes Terreno ZEIS 5'] = numero_lotes_terreno_zeis5
+    df_consolidado.at[a, 'Área lotes Terreno ZEIS 5'] = area_total_terreno_zeis5
+    df_consolidado.at[a, 'Número Lotes Outros usos ZEIS 5'] = numero_lotes_outros_usos_zeis5
+    df_consolidado.at[a, 'Área lotes Outros usos ZEIS 5'] = area_total_outros_usos_zeis5
+    caminho_arquivo_base_excel =f'C:\AAATino\Poli\decimo Semestre\GeoPro\Planilhas criados\Resultados por Distrito_2014\ZEIS_refinada_2023_{aux_nome}.xlsx'
+    gdf.to_excel(caminho_arquivo_base_excel, index=False, engine='openpyxl')
+    print(f"Deu certo para o distrito {arquivo}")
+    print(df_consolidado)
+    a += 1
+    caminho_arquivo_consolidado_excel = 'C:\AAATino\Poli\decimo Semestre\GeoPro\Planilhas criados\Resultados por Distrito_2014\Consolidado\Consolidado_2023.xlsx'
+    df_consolidado.to_excel(caminho_arquivo_consolidado_excel,index= False, engine = 'openpyxl')
+

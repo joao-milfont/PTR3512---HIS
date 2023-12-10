@@ -1,0 +1,50 @@
+import geopandas as gpd
+import pandas as pd
+import os
+import re
+
+#arquivos de 2014 foram usados como base para os cálculos
+pasta_base_2014 = r'C:\AAATino\Poli\decimo Semestre\GeoPro\Planilhas criados\Resultados por Distrito_2014\2014'
+arquivos_gpkg = [f for f in os.listdir(pasta_base_2014) if f.endswith('.xlsx')]
+
+# criação de uma planilha com os resultados, onde cada linha é de um distrito
+df_consolidado = pd.DataFrame(columns=['Distrito', 'Valor m² terreno', 'metragem dos terrenos','Valor m² construção','área construída'])
+
+a = 0
+
+for arquivo in arquivos_gpkg:
+    print(arquivo)
+    #df consolidado
+    gdf = pd.read_excel(pasta_base_2014+"\\"+arquivo)
+    
+    #cálculos para cada planilha - Geral
+
+    valor_total_terrenos = gdf.loc[(((gdf['Aux Resi Horizontal'] == 1) | (gdf['Aux Comercial Horizontal'] == 1) | (gdf['Aux Terreno'] == 1)) &
+                                    ((gdf['nova_coluna'] == "ZEIS 3") | (gdf['nova_coluna'] == "ZEIS 5"))),'Valor Total dos Terrenos'].sum()
+
+    metragem_total_lotes = gdf.loc[
+        (((gdf['Aux Resi Horizontal'] == 1) | (gdf['Aux Comercial Horizontal'] == 1) | (gdf['Aux Terreno'] == 1)) &
+         ((gdf['nova_coluna'] == "ZEIS 3") | (gdf['nova_coluna'] == "ZEIS 5"))), 'Área Total dos lotes'].sum()
+
+    valor_total_apartamentos = gdf.loc[(gdf['Aux Resi Vertical'] == 1),'Valor Total das Construções'].sum()
+    metragem_construida_apartamentos = gdf.loc[(gdf['Aux Resi Vertical'] == 1),'Área Total Construída'].sum()
+
+
+    #atribuição a nova linha no df_consolidado
+    
+    aux_nome = re.search(r'-\d-(.*?)(?=\.)',arquivo)
+    print(aux_nome)
+    df_consolidado.at[a, 'Distrito'] = aux_nome
+    
+    #geral
+    df_consolidado.at[a, 'Valor m² terreno'] = valor_total_terrenos
+    df_consolidado.at[a, 'metragem dos terrenos'] = metragem_total_lotes
+    df_consolidado.at[a, 'Valor m² construção'] = valor_total_apartamentos
+    df_consolidado.at[a, 'área construída'] = metragem_construida_apartamentos
+
+    print(f"Deu certo para o distrito {arquivo}")
+    print(df_consolidado)
+
+    a += 1
+    caminho_arquivo_consolidado_excel = 'C:\AAATino\Poli\decimo Semestre\GeoPro\Planilhas criados\Resultados por Distrito_2014\Métricas financeiras\métricas_2014.xlsx'
+    df_consolidado.to_excel(caminho_arquivo_consolidado_excel,index= False, engine = 'openpyxl')
